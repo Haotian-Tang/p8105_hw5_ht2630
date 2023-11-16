@@ -1,0 +1,57 @@
+---
+title: "p8105_hw5_ht2630"
+author: "Haotian Tang"
+date: "`r Sys.Date()`"
+output: github_document
+---
+
+---
+
+Problem 2
+
+So first let's import and tidy data. 
+
+```{r}
+library(tidyverse)
+
+```
+
+```{r}
+file_path = "data/"
+
+file_names = list.files(path = file_path, pattern = "*.csv")
+
+read_and_tidy = function(file_name) {
+  file_data = read_csv(paste0(file_path, file_name))
+  
+  subject_id = str_extract(file_name, "\\d+")
+  arm = ifelse(str_detect(file_name, "con"), "Control", "Experimental")
+  
+  file_data = file_data |>
+    mutate(Subject_ID = subject_id, Arm = arm)
+  
+  file_data = file_data |>
+    gather(key = "Week", value = "Observation", -Subject_ID, -Arm)
+  
+  return(file_data)
+}
+
+data_frame = map_df(file_names, read_and_tidy)
+
+cleaned_data_frame = data_frame |>
+  janitor::clean_names()
+  unite("ID_Week", Subject_ID, Week, remove = FALSE) |>
+  pivot_wider(names_from = Arm, values_from = Observation)
+```
+
+Now, make a spaghetti plot. 
+```{r}
+ggplot(cleaned_data_frame, aes(x = Week, y = Observation, group = Subject_ID, color = Arm)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "Spaghetti Plot of Observations Over Time",
+       x = "Week",
+       y = "Observation Value",
+       color = "Group")
+```
+
