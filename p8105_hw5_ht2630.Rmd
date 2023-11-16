@@ -13,6 +13,7 @@ So first let's import and tidy data.
 
 ```{r}
 library(tidyverse)
+library(broom)
 
 ```
 
@@ -36,22 +37,108 @@ read_and_tidy = function(file_name) {
   return(file_data)
 }
 
-data_frame = map_df(file_names, read_and_tidy)
-
-cleaned_data_frame = data_frame |>
-  janitor::clean_names()
-  unite("ID_Week", Subject_ID, Week, remove = FALSE) |>
-  pivot_wider(names_from = Arm, values_from = Observation)
+data_frame = map_df(file_names, read_and_tidy) |> 
+  pivot_wider(names_from = Arm, values_from = Observation)|> 
+  pivot_longer(cols = c(Control, Experimental), names_to = "Group", values_to = "Observation")
+  
 ```
 
 Now, make a spaghetti plot. 
 ```{r}
-ggplot(cleaned_data_frame, aes(x = Week, y = Observation, group = Subject_ID, color = Arm)) +
+ggplot = ggplot(data_frame, aes(x = Week, y = Observation, group = interaction(Subject_ID, Group), color = Group)) +
   geom_line() +
   theme_minimal() +
-  labs(title = "Spaghetti Plot of Observations Over Time",
+  labs(title = "Spaghetti Plot of Observations of Control and Experimental Group Over 8 Weeks",
        x = "Week",
        y = "Observation Value",
        color = "Group")
+
+ggsave("spaghetti.jpg", ggplot)
 ```
+Comment: The plot shows individual trajectories of observations for subjects in both control (red) and experimental (blue) groups over a period of eight weeks. We can see the observation values of experimental group are generally higher than control group, although some subjects in both groups show increases, decreases, or fluctuating patterns in their observation values over time.The experimental group appears to have an overall upward trend across the eight weeks, suggesting a possible positive effect of the experimental condition or treatment. The control group, on the other hand, shows more variability with no clear upward trend.
+
+
+---
+
+Problem 3 
+
+First, do some preparation. 
+
+```{r}
+set.seed(12345)
+
+sim_t_test = function(mu = mu) {
+  
+  x_vec = rnorm(n = 30, mean = mu, sd = 5)
+  t_result = t.test(x_vec, alternative = "two.sided", conf.level = 0.95)
+  tidy(t_result)
+  
+}
+
+output = vector("list", length = 5000)
+
+for (i in 1:5000) {
+  
+  output[[i]] = sim_t_test(mu = 0)
+  
+}
+
+mu0_results = bind_rows(output)
+
+```
+
+Now check the results. 
+
+```{r}
+sim_results =
+  expand_grid(
+    mu = 0:6,
+    iter = 1:5000
+  ) |> 
+  mutate(estimate_df = map(mu, ~sim_t_test(.x))) |> 
+  unnest(estimate_df)
+
+power_results =
+  sim_results |>
+  group_by(mu) |>
+  summarize(power = mean(p.value < 0.05)) 
+
+ggplot(power_results, aes(x = mu,y = power)) +
+  geom_path() +
+  geom_smooth() +
+  labs(title = "Comparisons Between Power of the Test and True Value of Mu",
+       x = "True Value of Mu",
+       y = "Power") +
+  theme_minimal()
+
+ggsave("Power vs Mu.jpg")
+```
+
+Check the averages. 
+
+```{r}
+average_estimates = 
+  sim_results |>
+  group_by(mu) |>
+  summarize(average_mu_hat_all = mean(estimate), 
+            average_mu_hat_rejected = mean(estimate[p.value < 0.05]))
+
+average_plot = 
+  average_estimates |>
+  ggplot(aes(x = mu)) +
+  geom_line(aes(y = average_mu_hat_all), color = "blue") +
+  geom_line(aes(y = average_mu_hat_rejected), color = "red") +
+  labs(title = "Average Estimates of Mu Hat and True Value of Mu",
+       x = "True Value of Mu",
+       y = "Average Estimates of Mu Hat") +
+  scale_color_manual(values = c("blue", "red")) +
+  theme_minimal()
+
+average_plot
+
+```
+
+Comment: The average estimate of mu is approximately equal to the true value of mu when the values are large, while they are somewhat different in samller values. I guess smaller values may contain more randomness are variability, so they tend to diverge. However, they are likely to converge when values increase. It suggests the situation that the null is rejected may depend on different statistical conditions. 
+
+
 
